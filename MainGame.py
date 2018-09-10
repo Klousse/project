@@ -58,6 +58,9 @@ snakeList = []
 moveList = []
 foodList = []# Apple, Golden Apple, Cherries, Eggplant, Chilly, Fire, Fire Lord
 foodTimerList = []# Apple, Golden Apple, Cherries, Eggplant, Chilly, Fire, Fire Lord
+gridX = int(boundX/blockSize)
+gridY = int(boundY/blockSize)
+firescreen = [[0 for i in range(0, gridY + 1)] for j in range(0, gridX + 1)]# boundX/blocksize x boundY/blocksize
 
 fIXApple = len(foodList); foodList.append([]); foodTimerList.append("NA")
 fIXGoldenApple = len(foodList); foodList.append([]); foodTimerList.append("NA")
@@ -67,7 +70,10 @@ fIXChilly = len(foodList); foodList.append([]); foodTimerList.append(4000)
 fIXFire = len(foodList); foodList.append([]); foodTimerList.append(5000)
 fIXFireLord = len(foodList); foodList.append([]); foodTimerList.append(5000)
 
+#These are food parameters used for game function
 bWrap = True
+bFireProof = False
+windDirection = [0, 0]
 
 # Importing font
 bodyFont = pygame.font.SysFont("comicsansms", 50)
@@ -80,9 +86,16 @@ blueHeadImage = pygame.image.load("images/BlueHead.png")
 blueBodyImage = pygame.image.load("images/BlueBody.png")
 appleImage = pygame.image.load("images/Apple.png")
 cherryImage = pygame.image.load("images/CherryTrans.png")
-eggplantImage = pygame.image.load("images/Berry.png")
+eggplantImage = pygame.image.load("images/Eggplant.png")
 goldenAppleImage = pygame.image.load("images/GoldenApple.png")
+Fire1Image = pygame.image.load("images/Fire1.png")
+Fire2Image = pygame.image.load("images/Fire2.png")
+Fire3Image = pygame.image.load("images/Fire3.png")
+Fire4Image = pygame.image.load("images/Fire4.png")
+FireAnimation = [Fire1Image, Fire2Image, Fire3Image, Fire4Image]
 icon = pygame.image.load("images/Icon.png")
+
+#fireLordImage = pygame.image.load("images/FireLord.png")
 
 # Configuring display
 gameDisplay = pygame.display.set_mode((displayWidth, displayHeight))
@@ -119,6 +132,7 @@ def startScreen():
         events = pygame.event.get()
         for event in events:
             if event.type == pygame.QUIT:
+                logging.debug("Event caused game to quit")
                 quitProgram()
 
         startButton.showButton()
@@ -160,6 +174,7 @@ def pause():
         events = pygame.event.get()
         for event in events:
             if event.type == pygame.QUIT:
+                logging.debug("Event caused game to quit during pause")
                 quitProgram()
             if event.type == pygame.MOUSEBUTTONDOWN:
                 return
@@ -174,12 +189,12 @@ def randomApple():
     This function handles the random apple generation.
     :return:
     """
-    global fIXApple;
-    global fIXGoldenApple;
-    global fIXCherry;
-    global fIXEggplant;
-    global fIXChilly;
-    global fIXFire;
+    global fIXApple
+    global fIXGoldenApple
+    global fIXCherry
+    global fIXEggplant
+    global fIXChilly
+    global fIXFire
     global fIXFireLord
     global randAppleX
     global randAppleY
@@ -226,22 +241,56 @@ def generateThing(index, number):
             X = round(random.randint(blockSize * 2, boundX - (blockSize * 4)) / blockSize) * blockSize
             Y = round(random.randint(blockSize * 2, boundY - (blockSize * 4)) / blockSize) * blockSize
             if [X, Y] in snakeList or (X >= scoreBoundWidth and Y <= scoreBoundHeight) or [X, Y] is [leadX, leadY]:
-                logging.debug('Stopped spawning food on top of the snake')
+                logging.debug('Stopped spawning' + index.__str__() + 'on top of the snake')
                 break
             for array in foodList:
                 for coord in array:
                     if [X, Y] is [coord[0], coord[1]]:
-                        logging.debug('Stopped stacking food on top of each other')
-                        break
+                        logging.debug('Stopped stacking' + index.__str__() + 'on top of each other')
+                        return
+
             ticket = "NA"
             if foodTimerList[index] is not "NA":
-                ticket = len(foodList) + index
+                ticket = len(foodList) + index + pygame.QUIT + 1
                 pygame.time.set_timer(ticket, foodTimerList[index])
                 logging.debug('que item ' + index.__str__() + ' for ' + foodTimerList[index].__str__() + 'ms')
 
             foodList[index].append([X, Y, ticket])
             count += 1
             bFound = True
+            if index is fIXFire:
+                gridX_coord = int(X/blockSize)
+                gridY_coord = int(Y/blockSize)
+                firescreen[gridX_coord][gridY_coord] is True
+
+
+def generateThingSL(index, X, Y):
+    """
+    This will generate anything that can be generated given the index
+    :param index:
+    :return:
+    """
+    global foodList
+    global foodTimerList
+    global blockSize
+    global boundX
+    global boundY
+    if [X, Y] in snakeList or (X >= scoreBoundWidth and Y <= scoreBoundHeight) or [X, Y] is [leadX, leadY] or X < blockSize or Y < blockSize or X > boundX or Y > boundY:
+        logging.debug('Stopped spawning' + index.__str__() + 'specified location')
+        return
+
+    for array in foodList:
+        for coord in array:
+            if [X, Y] is [coord[0], coord[1]]:
+                logging.debug('Stopped stacking' + index.__str__() + 'on top of something else')
+                return
+
+    ticket = "NA"
+    if foodTimerList[index] is not "NA":
+        ticket = len(foodList) + index + pygame.QUIT + 1
+        pygame.time.set_timer(ticket, foodTimerList[index])
+        logging.debug('que item ' + index.__str__() + ' for ' + foodTimerList[index].__str__() + 'ms')
+    foodList[index].append([X, Y, ticket])
 
 
 def resolveThing(index, entry, bConsumed):
@@ -252,16 +301,18 @@ def resolveThing(index, entry, bConsumed):
     :return: performs the function upon resolution of the 'Thing'
     """
     global fIXApple; global fIXGoldenApple; global fIXCherry; global fIXEggplant; global fIXChilly; global fIXFire; global fIXFireLord
-    global scoreCounter; global appleCounter
+    global scoreCounter; global appleCounter;
     global bWrap
+    global bFireProof
+    global windDirection
+    global gameOver
 
-    foodList[index].remove(entry)
 
     if index is fIXApple:
         if bConsumed:
             apples = 1 + len(foodList[fIXApple]) + len(foodList[fIXGoldenApple])
             if apples is 1 or (apples > 1 and random.randint(1, 100) <= 103 - apples*apples):
-                if random.randint(1, 6) <= 1:
+                if random.randint(1, 1) <= 1:
                     generateThing(fIXGoldenApple, 1)
                 else:
                     generateThing(fIXApple, 1)
@@ -272,14 +323,22 @@ def resolveThing(index, entry, bConsumed):
             scoreCounter += 1
             appleCounter += 1
             logging.debug('Ate Red Apple at (' + entry[0].__str__() + ', ' + entry[1].__str__() + ')')
+            if appleCounter == 25 and len(foodList[fIXFireLord]) is 0:
+                generateThing(fIXFireLord, 1)
+                logging.debug("The Fire Lord has been summoned")
 
     elif index is fIXGoldenApple:
         if bConsumed:
             apples = 1 + len(foodList[fIXGoldenApple])
             if random.randint(1, 100) <= 103 - 3*apples*apples:
                 generateThing(fIXGoldenApple, 2)
-            else:
+            if random.randint(1, 1) == 1:
+                generateThing(fIXFire, 1)
                 generateThing(fIXApple, 2)
+
+                logging.debug("Fire has spawned")
+            else:
+                generateThing(fIXApple, 3)
             if random.randint(1, 4) == 1:
                 generateThing(fIXCherry, 2)
             scoreCounter += 2
@@ -298,6 +357,34 @@ def resolveThing(index, entry, bConsumed):
             scoreCounter += 3
             logging.debug('Ate Cherry at (' + entry[0].__str__() + ', ' + entry[1].__str__() + ')')
         logging.debug('Eggplant timed out at (' + entry[0].__str__() + ', ' + entry[1].__str__() + ')')
+
+    elif index is fIXFire:
+        x = int(entry[0]/blockSize + windDirection[0])
+        y = int(entry[1]/blockSize + windDirection[1])
+        if bConsumed is True:
+            if bFireProof is False:
+                gameOver = True
+                logging.debug("Burnt to death :(")
+            else:
+                logging.debug("Ate the fire")
+                firescreen[x][y] = False
+        else:
+            try:
+                if firescreen[x][y] is True:  # Don't spread if there's already a fire'
+                    foodList[index].remove(entry) #in fact, remove it
+                    firescreen[x - windDirection[0]][y - windDirection[1]] = False # from both lists then log it and leave...
+                    logging.debug("Fire at " + x.__str__() + ", ", + y.__str__(), "failed to spread: " + windDirection[0].__str__() + ", " + windDirection[1].__str__())
+                    return
+            except:
+                return  # Or if we're trying to spread out of bounds.  Just Leave'
+
+# Still here? then the space is vacant. Fill it with fire.
+            generateThingSL(fIXFire, entry[0] + windDirection[0]*blockSize, entry[1] + windDirection[1]*blockSize)
+            firescreen[x + windDirection[0]][y + windDirection[1]] = True # Keeping track of both lists (food and fire).
+            logging.debug("Fire spreading to " + windDirection[0].__str__() + ", " + windDirection[1].__str__()) #log it.
+            return
+
+    foodList[index].remove(entry)
 
 
 def snake(snakeCoors):
@@ -450,12 +537,13 @@ def gameLoop():
     global bCherry
     global bEggplant
     global FPS
+    global fIXFire
+    global windDirection
     leadXChange = blockSize
     leadYChange = 0
     gameOver = False
     bWrap = True
     goldenApple = generateGoldenApple()
-
 
     generateThing(fIXApple, 1)
 
@@ -463,40 +551,33 @@ def gameLoop():
         events = pygame.event.get()
         fillBackground(False)
 
-        while gameOver:  # the user lost
-            logging.info("Score\t" + scoreCounter.__str__())
-            if highScore < scoreCounter:
-                # set new high score if applicable
-                with open('score.dat', 'rb') as fromFile:
-                    highScore = pickle.load(fromFile)
-                with open('score.dat', 'wb') as fromFile:
-                    pickle.dump(scoreCounter, fromFile)
-            events = pygame.event.get()
-            for event in events:
-                if event.type == pygame.QUIT:
-                    quitProgram()
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    reset()
-                    gameLoop()
-
-
-            fillBackground(False)
-            showScores(scoreCounter, highScore < scoreCounter)
-            put_message_center("Game Over!", red)
-            put_message_custom("Click to play again.", black, fontSize=30, offsetY=50)
-            pygame.display.update()
-
         for event in events:
             if event.type == pygame.QUIT:
+                logging.debug("Event caused game to quit within the Game Loop")
                 quitProgram()
-            if event.type == 17:
-                bCherry = False
-            if event.type == 18:
-                bEggplant = False
+
+            index = -1
             for thing in foodList:
-                for array in thing:
-                    if event.type == array[2]:
-                        resolveThing(foodList.index(thing), array, False)
+                index += 1
+                num = len(thing)
+                count = 0
+                while count < num:
+                    try:
+                        if event.type == thing[count][2]:
+                            resolveThing(foodList.index(thing), thing[count], False)
+                        count += 1
+                    except:
+                        count += 1
+                if index is fIXFire: #if we just resolved all the fire, randomize the windDirection
+                    windDirection = [random.randint(-1, 1), random.randint(-1, 1)]
+
+            ScreenSweepx = 0
+            ScreenSweepy = 0
+            while ScreenSweepx < boundX:
+                ScreenSweepx += blockSize
+                while ScreenSweepy < boundY:
+                    ScreenSweepy += blockSize
+
 
             if len(moveList) > 0 and bAcceptButton:
                 if moveList[0] == "L" and (len(snakeList) < 2 or degrees != 270):
@@ -584,7 +665,9 @@ def gameLoop():
         for thing in foodList:
             for info in thing:  # if the snake has eaten the thing
                 if leadX == info[0] and leadY == info[1]:
-                    scoreCounter += 1
+                    if (thing is foodList[fIXFire] and bFireProof is False) or (thing is foodList[fIXFireLord] and bFireProof is False):
+                        gameOver = True
+                        break
                     resolveThing(foodList.index(thing), info, True)
 
         snakeHead = [leadX, leadY]  # updates the snake's head location
@@ -606,8 +689,11 @@ def gameLoop():
         for coord in foodList[fIXCherry]:
             gameDisplay.blit(cherryImage, (coord[0], coord[1]))
         for coord in foodList[fIXEggplant]:
-
             gameDisplay.blit(eggplantImage, (coord[0], coord[1]))
+        Frame = random.randint(0, len(FireAnimation) - 1)
+        for coord in foodList[fIXFire]:
+            if coord[2] is not "NA":
+                gameDisplay.blit(FireAnimation[Frame], (coord[0], coord[1]))
 
         with open('score.dat', 'rb') as fromFile:  # load high score
             highScore = pickle.load(fromFile)
@@ -615,6 +701,29 @@ def gameLoop():
         showScores(scoreCounter, highScore < scoreCounter)
         pygame.display.update()
         clock.tick(FPS + (appleCounter / 50))  # set FPS, scales with how many apples the user has
+
+        while gameOver:  # the user lost
+            logging.info("Score\t" + scoreCounter.__str__())
+            if highScore < scoreCounter:
+                # set new high score if applicable
+                with open('score.dat', 'rb') as fromFile:
+                    highScore = pickle.load(fromFile)
+                with open('score.dat', 'wb') as fromFile:
+                    pickle.dump(scoreCounter, fromFile)
+            events = pygame.event.get()
+            for event in events:
+                if event.type == pygame.QUIT:
+                    logging.debug("Event caused game to quit within the Game Loop during gameOver")
+                    quitProgram()
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    reset()
+                    gameLoop()
+            fillBackground(False)
+            showScores(scoreCounter, highScore < scoreCounter)
+            put_message_center("Game Over!", red)
+            put_message_custom("Click to play again.", black, fontSize=30, offsetY=50)
+            pygame.display.update()
+
 
 def getCursorPos():
     return pygame.mouse.get_pos()
